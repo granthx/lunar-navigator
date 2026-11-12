@@ -1,0 +1,7 @@
+numpy
+scipy
+uvicorn
+# optional
+pytest
+spiceypy    # SPICE ephemeris upgrade path (backend/ephemeris.py: spice_backend)
+rasterio    # scripts/prepare_dem.py
