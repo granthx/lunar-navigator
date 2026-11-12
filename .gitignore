@@ -1,0 +1,33 @@
+# Secrets and local configuration
+.env
+.env.*
+*.key
+*.pem
+
+# Generated or downloaded data (large, regenerable, or licensed separately)
+backend/data/spice/
+backend/data/*.npz
+backend/data/*.tif
+backend/data/*.tiff
+backend/data/*.img
+backend/data/*.lbl
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# Node
+node_modules/
+
+# Verification artefacts
+artifacts/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
