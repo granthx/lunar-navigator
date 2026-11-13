@@ -1,0 +1,6 @@
+{
+  "_comment": "Fill in coordinates from NASA's official Artemis candidate-region documentation before use. Set verified=true only after you have checked each one.",
+  "sites": [
+    {"id": "example_1", "name": "Replace with a verified site name", "lat": -89.0, "lon": 0.0, "verified": false, "note": "placeholder - not a real site"}
+  ]
+}
