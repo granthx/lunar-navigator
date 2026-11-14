@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lunar Landing Site Navigator</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body data-mode="planner">
+  <header class="top">
+    <div>
+      <h1>Lunar Landing Site Navigator</h1>
+      <p class="tagline">Lunar landing decisions in 30 seconds, with proof.</p>
+    </div>
+    <fieldset class="mode">
+      <legend>View for</legend>
+      <label><input type="radio" name="mode" value="planner" checked> Mission planners</label>
+      <label><input type="radio" name="mode" value="public"> Educators and the public</label>
+    </fieldset>
+  </header>
+
+  <div id="banner" class="banner" role="note"></div>
+  <div id="toast" class="toast" role="alert" hidden></div>
+
+  <div class="layout">
+    <form id="controls" class="rail panel" autocomplete="off">
+      <h2>Your mission</h2>
+
+      <fieldset class="sites">
+        <legend>Sites to compare</legend>
+        <div id="siteChips"></div>
+      </fieldset>
+
+      <div class="field">
+        <label for="start">Search from</label>
+        <input id="start" type="date" required>
+      </div>
+      <div class="field">
+        <label for="end">Search until</label>
+        <input id="end" type="date" required>
+      </div>
+      <div class="field">
+        <label for="durDays">Mission length (days)</label>
+        <input id="durDays" type="number" min="0.25" max="60" step="0.25" value="14" required>
+      </div>
+      <div class="field">
+        <label for="objective">What matters most</label>
+        <select id="objective">
+          <option value="balanced">Power and a link to Earth together</option>
+          <option value="power">Sunlight for power</option>
+          <option value="comms">A direct link to Earth</option>
+          <option value="survive">Surviving the dark on battery</option>
+        </select>
+      </div>
+      <div class="field" id="batteryRow" hidden>
+        <label for="battery">Battery lasts (hours)</label>
+        <input id="battery" type="number" min="1" max="2000" step="1" value="48">
+      </div>
+      <div class="field">
+        <label for="mast">Antenna and panel height: <output id="mastOut">0 m</output></label>
+        <input id="mast" type="range" min="0" max="15" step="1" value="0">
+      </div>
+      <button id="go" class="btn primary" type="submit">Compare sites</button>
+      <p class="hint for-public">Pick sites and dates, then press Compare. Green hours are the good ones.</p>
+    </form>
+
+    <div class="stage">
+      <section class="panel copilot" aria-labelledby="askTitle">
+        <h2 id="askTitle">Ask in plain English</h2>
+        <form id="askForm">
+          <label for="ask" class="sr-only">Your question</label>
+          <textarea id="ask" rows="2" maxlength="1000"
+            placeholder="Which site can survive a 10-day mission in March with a 60-hour battery?"></textarea>
+          <div class="ask-row">
+            <div id="examples" class="examples"></div>
+            <button id="askGo" class="btn primary" type="submit">Ask</button>
+          </div>
+        </form>
+        <div id="answer" class="answer" hidden aria-live="polite">
+          <p id="answerText" class="answer-text"></p>
+          <p id="verify" class="verify"></p>
+          <div id="assumed" class="assumed"></div>
+          <details id="trace" class="trace"></details>
+        </div>
+      </section>
+
+      <section class="panel sky" aria-labelledby="skyTitle">
+        <div class="panel-head">
+          <h2 id="skyTitle">The sky above the terrain</h2>
+          <div class="inline">
+            <label for="focus">Site</label>
+            <select id="focus"></select>
+          </div>
+        </div>
+        <canvas id="horizon" role="img" aria-label="Horizon plot"></canvas>
+        <p class="caption">The grey shape is the terrain skyline seen from the site. Yellow dots trace where the Sun goes over your dates, blue dots Earth. A body above the skyline can be seen from the lander; a dashed outline means terrain hides it.</p>
+        <div class="scrub">
+          <label for="scrub" class="sr-only">Time within the search range</label>
+          <input id="scrub" type="range" min="0" max="0" value="0">
+          <button id="play" class="btn ghost" type="button">Play time-lapse</button>
+        </div>
+        <p id="readout" class="readout"></p>
+      </section>
+
+      <section class="panel" aria-labelledby="tlTitle">
+        <h2 id="tlTitle">When each site has power and a link to Earth</h2>
+        <ul id="legend" class="legend"></ul>
+        <canvas id="timeline" role="img" aria-label="Timeline of power and communication availability per site"></canvas>
+        <p class="caption for-public">Each row is a site, each thin stripe an hour. Click or drag to move through time.</p>
+        <div id="cards" class="cards"></div>
+        <div class="export for-planner">
+          <button id="csv" class="btn ghost" type="button">Download hourly data (CSV)</button>
+          <button id="png" class="btn ghost" type="button">Save sky plot (PNG)</button>
+        </div>
+      </section>
+
+      <section class="panel" aria-label="Analysis">
+        <div role="tablist" class="tabs" aria-label="Analysis views">
+          <button role="tab" id="t-windows" aria-controls="tab-windows" aria-selected="true" data-tab="windows">Best windows</button>
+          <button role="tab" id="t-mast" aria-controls="tab-mast" aria-selected="false" data-tab="mast" tabindex="-1">Antenna height</button>
+          <button role="tab" id="t-moon" aria-controls="tab-moon" aria-selected="false" data-tab="moon" tabindex="-1">Standing on the Moon</button>
+        </div>
+
+        <div id="tab-windows" role="tabpanel" aria-labelledby="t-windows">
+          <div id="winList"></div>
+          <h3 id="bandTitle" hidden>How sure are we about the selected window?</h3>
+          <canvas id="band" role="img" aria-label="Confidence of power and communication across the selected window" hidden></canvas>
+          <p id="bandNote" class="caption"></p>
+        </div>
+
+        <div id="tab-mast" role="tabpanel" aria-labelledby="t-mast" hidden>
+          <p class="caption">What changes if the antenna and solar panels sit higher above the ground, over the selected window.</p>
+          <canvas id="heightChart" role="img" aria-label="Share of window with power and communication by antenna height"></canvas>
+          <p id="mastNote" class="caption"></p>
+        </div>
+
+        <div id="tab-moon" role="tabpanel" aria-labelledby="t-moon" hidden>
+          <div class="moon-controls">
+            <label>Heights <select id="stretch"><option value="1">True scale</option><option value="3" selected>Stretched 3×</option><option value="5">Stretched 5×</option></select></label>
+            <label><input id="enlarge" type="checkbox" checked> Enlarge Sun and Earth 3×</label>
+            <label>Field of view <input id="fov" type="range" min="30" max="180" value="110"></label>
+          </div>
+          <canvas id="pano" role="img" aria-label="First-person view of the terrain skyline with the Sun and Earth"></canvas>
+          <p class="caption">Skyline drawn from the terrain model for the chosen site and time. Drag to look around, scroll to zoom. This is the horizon silhouette, not a rendering of every rock.</p>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script src="/static/lib.js"></script>
+  <script src="/static/draw.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
