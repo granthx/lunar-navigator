@@ -97,9 +97,16 @@ def find_windows(times, power, comms, duration_h: float, step_h: float = 1.0,
     picked, used = [], []
     for sc, ok, s, m in cands:
         if all(abs(s - u) >= sep for u in used):
+            end_index = s + L
+            # The window end is exclusive. Use the next sample when it exists;
+            # at the end of the series, advance the start by the window length.
+            if end_index < n:
+                end_time = times[end_index]
+            else:
+                end_time = times[s] + np.timedelta64(int(round(L * step_h * 60)), "m")
             picked.append({
-                "start_index": s, "end_index": s + L,
-                "start": str(times[s]), "end": str(times[min(s + L, n - 1)]),
+                "start_index": s, "end_index": end_index,
+                "start": str(times[s]), "end": str(end_time),
                 "score": sc, "feasible": ok, "metrics": m, "objective": objective,
             })
             used.append(s)

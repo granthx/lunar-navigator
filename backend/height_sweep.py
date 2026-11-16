@@ -5,6 +5,7 @@ from .dem import DEM
 from .horizon import compute_horizon
 from .visibility import classify, metrics
 
+MAX_MAST_M = 15.0
 DEFAULT_HEIGHTS_M = (0.0, 1.0, 2.0, 3.0, 5.0, 8.0, 10.0, 15.0)
 
 
@@ -23,6 +24,9 @@ def height_sweep(dem: DEM, lat: float, lon: float, series: dict, heights=DEFAULT
         m["height_m"] = float(h)
         rows.append(m)
 
+    if not rows:
+        raise ValueError("at least one height is required")
+
     flips = {}
     for key in ("power_pct", "comms_pct", "both_pct"):
         best = None
@@ -31,6 +35,10 @@ def height_sweep(dem: DEM, lat: float, lon: float, series: dict, heights=DEFAULT
             if best is None or jump > best["jump_pct"]:
                 best = {"from_height_m": a["height_m"], "to_height_m": b["height_m"],
                         "jump_pct": jump, "from_pct": a[key], "to_pct": b[key]}
-        best["is_flip"] = bool(best and best["jump_pct"] >= flip_threshold_pct)
+        if best is None:  # a single height has no pair to compare
+            only = rows[0]
+            best = {"from_height_m": only["height_m"], "to_height_m": only["height_m"],
+                    "jump_pct": 0.0, "from_pct": only[key], "to_pct": only[key]}
+        best["is_flip"] = bool(best["jump_pct"] >= flip_threshold_pct)
         flips[key] = best
     return {"rows": rows, "biggest_jumps": flips, "flip_threshold_pct": flip_threshold_pct}
