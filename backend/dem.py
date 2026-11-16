@@ -110,6 +110,45 @@ def from_proj_south_polar(z_std: np.ndarray, px_m: float, label: str = "") -> DE
     return DEM(z, px_m, c, c, synthetic=False, label=label or "converted from PROJ south polar grid")
 
 
+def from_proj_south_polar_area(z_std: np.ndarray, px_m: float, pole_col: float,
+                               pole_row: float, radius_m: float,
+                               label: str = "") -> DEM:
+    """Convert an area-registered PROJ south-polar grid whose pole may fall between pixels.
+
+    `pole_col` and `pole_row` are the projected origin in the same continuous pixel
+    convention as `scipy.ndimage.map_coordinates`: integer values are pixel centres.
+    For a 7600-pixel grid with bounds +/-304 km and 80 m pixels, the pole is at
+    (3799.5, 3799.5), not at the centre of pixel (3800, 3800).
+
+    The output is an odd-sized internal grid with the pole at its centre pixel, so the
+    existing `DEM` geometry applies without a half-pixel offset.
+    """
+    z_std = np.asarray(z_std, dtype=np.float32)
+    if z_std.ndim != 2:
+        raise ValueError("expected a 2-D array")
+    if px_m <= 0 or radius_m <= 0:
+        raise ValueError("pixel size and radius must be positive")
+
+    half = int(np.floor(radius_m / px_m))
+    n = 2 * half + 1
+    c = float(half)
+    rows, cols = np.mgrid[0:n, 0:n].astype(float)
+    x = (cols - c) * px_m
+    y = (c - rows) * px_m
+    # Source convention: X = rho*sin(lon), Y = rho*cos(lon); internal:
+    # x = rho*cos(lon), y = rho*sin(lon), hence X = y and Y = x.
+    src_col = pole_col + y / px_m
+    src_row = pole_row - x / px_m
+    h, w = z_std.shape
+    if (src_col.min() < 0 or src_col.max() > w - 1
+            or src_row.min() < 0 or src_row.max() > h - 1):
+        raise ValueError("crop radius extends beyond the source grid")
+
+    z = map_coordinates(z_std, [src_row, src_col], order=1, mode="nearest")
+    return DEM(z.astype(np.float32), px_m, c, c, synthetic=False,
+               label=label or "converted from area-registered PROJ south polar grid")
+
+
 def synthetic_dem(size_px: int = 1000, px_m: float = 100.0, seed: int = 7) -> DEM:
     """Fractal terrain + craters + massifs, centred on the south pole. NOT REAL DATA."""
     rng = np.random.default_rng(seed)
