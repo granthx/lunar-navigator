@@ -21,6 +21,8 @@ class Site:
     lon: float          # selenographic longitude, deg east (0-360)
     verified: bool = False
     note: str = ""
+    representative: bool = False  # a point inside a region, not a certified landing coordinate
+    source: str = ""              # provenance for the coordinates
 
     def to_dict(self):
         return asdict(self)
