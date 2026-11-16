@@ -1,20 +1,21 @@
-"""Sun and Earth directions as seen from a site on the Moon (pure numpy).
+"""Sun and Earth directions as seen from a site on the Moon.
 
-This is an ANALYTICAL approximation, used because SPICE kernels could not be
-downloaded in the development sandbox. Method:
+Two backends produce the same output shape:
 
-  * Sun: Meeus, Astronomical Algorithms ch. 25 (low accuracy, ~0.01 deg).
-  * Moon: Meeus ch. 47 truncated series (~0.02-0.05 deg).
-  * Lunar orientation: IAU 2015 rotation model (Archinal et al. 2018),
-    giving the mean-Earth/polar-axis frame.
-  * Earth parallax from the site is included (the Earth is only ~60 Earth
-    radii away); the Sun's parallax from the Moon-Earth offset is included.
+  * `sun_earth_azel`: pure-numpy analytical approximation (default).
+  * `spice_backend`: NAIF SPICE with DE440 kernels.
 
-Expected accuracy is a few hundredths of a degree, which is adequate for
-horizon features of a degree or more but NOT a substitute for SPICE when
-precision matters. `spice_backend` below shows the drop-in upgrade path.
+The analytical path uses Meeus, Astronomical Algorithms ch. 25 (Sun) and ch. 47
+(Moon), plus the IAU 2015 lunar rotation model (Archinal et al. 2018). Its
+accuracy is a few hundredths of a degree, adequate for horizon features of a
+degree or more but NOT a substitute for SPICE when precision matters. The
+development sandbox originally could not download kernels; Phase 3 added a
+tested SPICE path, selected through the service layer.
 """
 from __future__ import annotations
+
+import os
+from pathlib import Path
 
 import numpy as np
 
@@ -22,6 +23,17 @@ R_MOON_KM = 1737.4
 AU_KM = 149597870.7
 TT_MINUS_UTC_S = 69.184  # 37 s leap seconds + 32.184 s (valid since 2017)
 J2000_JD = 2451545.0
+
+SPICE_KERNEL_FILES = (
+    "naif0012.tls",
+    "de440s.bsp",
+    "moon_pa_de440_200625.bpc",
+    "moon_de440_250416.tf",
+    "pck00011.tpc",
+)
+SPICE_KERNEL_DIR = Path(__file__).resolve().parent / "data" / "spice"
+
+_SPICE_LOADED: tuple[str, ...] | None = None
 
 # --------------------------------------------------------------------------
 # time
@@ -346,26 +358,62 @@ def sub_earth_and_solar_points(times):
     return {"earth_lat": earth_lat, "earth_lon": earth_lon, "sun_lat": sun_lat, "sun_lon": sun_lon_bf}
 
 
-def spice_backend(lat_deg, lon_deg, times, kernels):  # pragma: no cover - needs spiceypy
-    """Upgrade path: same outputs as `sun_earth_azel`, computed with SPICE.
+def default_spice_kernels() -> list[str]:
+    """The DE440 kernel set this project expects, in `backend/data/spice/`."""
+    return [str(SPICE_KERNEL_DIR / name) for name in SPICE_KERNEL_FILES]
 
-    Requires `pip install spiceypy` and kernels from NAIF (naif0012.tls,
-    de440s.bsp, pck00011.tpc, moon_pa_de440_200625.bpc, moon_de440_250416.tf).
-    Not exercised in the sandbox; see scripts/README_DATA.md.
+
+def load_spice_kernels(kernels) -> tuple[str, ...]:
+    """Furnish a SPICE kernel set once per process and return resolved paths.
+
+    SPICE's kernel pool is process-wide. If a different set is requested, the
+    old pool is cleared first. Missing files fail loudly instead of leaving a
+    half-configured backend.
+    """
+    global _SPICE_LOADED
+    import spiceypy as sp
+
+    paths = tuple(str(Path(k).expanduser().resolve()) for k in kernels)
+    missing = [p for p in paths if not os.path.isfile(p)]
+    if missing:
+        raise FileNotFoundError("missing SPICE kernel(s): " + ", ".join(missing))
+    if _SPICE_LOADED == paths:
+        return paths
+    if _SPICE_LOADED is not None:
+        sp.kclear()
+    for p in paths:
+        sp.furnsh(p)
+    _SPICE_LOADED = paths
+    return paths
+
+
+def spice_backend(lat_deg, lon_deg, times, kernels=None):
+    """Sun/Earth az/el and Earth distance from SPICE DE440, in the MOON_ME frame.
+
+    `kernels` furnishes a kernel set (cached process-wide). If omitted, a set
+    must already have been loaded with `load_spice_kernels`. The site is placed
+    on the reference sphere; elevation changes these directions by well under
+    0.001 deg.
     """
     import spiceypy as sp
 
-    for k in kernels:
-        sp.furnsh(k)
-    ets = [sp.str2et(str(t)) for t in np.asarray(times).astype("datetime64[s]")]
-    out = {k: [] for k in ("sun_az", "sun_el", "earth_az", "earth_el")}
+    if kernels is not None:
+        load_spice_kernels(kernels)
+    elif _SPICE_LOADED is None:
+        raise RuntimeError("no SPICE kernels loaded; pass kernels or call load_spice_kernels()")
+
+    t = np.asarray(times).astype("datetime64[s]")
+    ets = [sp.str2et(str(x)) for x in t]
     phi, lam = np.radians(lat_deg), np.radians(lon_deg)
     site = sp.georec(lam, phi, 0.0, R_MOON_KM, 0.0)
+    out = {k: [] for k in ("sun_az", "sun_el", "earth_az", "earth_el", "earth_dist_km")}
     for et in ets:
         for body, key in (("SUN", "sun"), ("EARTH", "earth")):
             st, _ = sp.spkpos(body, et, "MOON_ME", "LT+S", "MOON")
-            v = np.array(st) - site
+            v = np.asarray(st, dtype=float) - site
             az, el = _azel(v, lat_deg, lon_deg)
             out[key + "_az"].append(float(az))
             out[key + "_el"].append(float(el))
-    return {k: np.array(v) for k, v in out.items()}
+            if key == "earth":
+                out["earth_dist_km"].append(float(np.linalg.norm(v)))
+    return {k: np.asarray(v, dtype=float) for k, v in out.items()}
