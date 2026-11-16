@@ -104,6 +104,12 @@ def test_window_finder_picks_the_overlap():
     w = res[0]
     assert 100 <= w["start_index"] <= 102
     assert w["metrics"]["both_pct"] == pytest.approx(100.0)
+    # A window ending at the last sample still reports its exclusive end time.
+    n, L = 48, 48
+    full = np.datetime64("2027-01-01T00:00") + np.arange(n) * np.timedelta64(1, "h")
+    edge = find_windows(full, np.ones(n, bool), np.ones(n, bool), duration_h=L, top_n=1)[0]
+    assert edge["start_index"] == 0 and edge["end_index"] == n
+    assert edge["end"] == "2027-01-03T00:00"
 
 
 def test_window_finder_battery_constraint():
@@ -143,6 +149,11 @@ def test_height_sweep_finds_the_flip():
     j = out["biggest_jumps"]["power_pct"]
     assert j["is_flip"] and j["from_height_m"] == 1.0 and j["to_height_m"] == 2.0
     assert not out["biggest_jumps"]["comms_pct"]["is_flip"]
+    # One height has no adjacent pair; it must still return a usable row and jump summary.
+    one = height_sweep(dem, SITE_LAT, SITE_LON, series, heights=(5,), rmax_m=5000)
+    assert len(one["rows"]) == 1 and one["rows"][0]["height_m"] == 5.0
+    assert one["biggest_jumps"]["power_pct"]["is_flip"] is False
+    assert one["biggest_jumps"]["power_pct"]["jump_pct"] == 0.0
 
 
 def test_uncertainty_labels():

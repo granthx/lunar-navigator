@@ -132,7 +132,14 @@ const ok = (n) => { passed++; console.log("ok -", n); };
   assert.ok(byId.banner.children.length >= 2 && /SYNTHETIC/.test(byId.banner.textContent), "synthetic warning must be visible");
   assert.strictEqual(byId.cards.children.length, 5);
   assert.ok(/Power \+ comms/.test(byId.cards.textContent));
-  ok("banner warns about synthetic data; one card per site");
+  assert.strictEqual(byId.legend.children.length, 4);
+  assert.ok(/power only/.test(byId.legend.textContent) && /comms only/.test(byId.legend.textContent) &&
+    /power \+ comms/.test(byId.legend.textContent));
+  const swatches = byId.legend.children.map((li) => li.children.find((c) => c.tag === "i").attrs.style);
+  assert.deepStrictEqual(swatches, ["background:#23262f", "background:#d9a441",
+    "background:#3a6ea5", "background:#8fe3b0"]);
+  assert.strictEqual(String(byId.mast.max), "15");
+  ok("banner warns about synthetic data; one card per site; legend matches timeline colours");
 
   assert.ok(/Sun:/.test(byId.readout.textContent) && !/NaN|undefined/.test(byId.readout.textContent));
   assert.ok(/window is (robust|moderate|fragile)/.test(byId.bandNote.textContent));
@@ -203,10 +210,20 @@ const ok = (n) => { passed++; console.log("ok -", n); };
   await until(() => !byId.answer.hidden && !byId.askGo.disabled && settled(), "copilot answer");
   await sleep(1500);
   assert.ok(byId.answerText.textContent.length > 30);
-  assert.ok(/ok/.test(byId.verify.className) && /all supported/.test(byId.verify.textContent), byId.verify.textContent);
+  assert.ok(/ok/.test(byId.verify.className) && /Checked against the data/.test(byId.verify.textContent) &&
+    /value-presence check/.test(byId.verify.textContent) && !/all supported/.test(byId.verify.textContent),
+    byId.verify.textContent);
   assert.ok(byId.trace.children.length === 2);
   assert.strictEqual(byId.start.value.length, 10);
   assert.ok(selected().join() === "demo_a,demo_b", selected().join());
+
+  // A request above the product limit is capped and reported, not applied inconsistently.
+  byId.ask.value = "use a 30 m mast for 7 days at site a";
+  byId.askForm.dispatch("submit");
+  await until(() => !byId.askGo.disabled && settled() && /15 m/.test(byId.assumed.textContent), "mast clamp");
+  await sleep(800);
+  assert.strictEqual(String(byId.mast.value), "15");
+  assert.ok(byId.toast.hidden, byId.toast.textContent);
   ok("copilot answers, verifies, applies the request to the controls and charts");
 
   // an empty question is rejected clearly

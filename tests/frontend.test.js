@@ -73,6 +73,9 @@ test("buildCsv matches the data", () => {
   assert.strictEqual(f[0], s.times[0]);
   assert.strictEqual(Number(f[2]), s.sun_el[0]);
   assert.strictEqual(f[5], Lib.CODE_NAMES[s.code[0]]);
+  // Status colours must agree with the timeline: gold = power, blue = comms.
+  assert.deepStrictEqual(Lib.CODE_COLORS, ["#23262f", "#d9a441", "#3a6ea5", "#8fe3b0"]);
+  assert.deepStrictEqual(Lib.CODE_NAMES, ["neither", "power only", "comms only", "power + comms"]);
 });
 
 test("fixture data is sane (guards against API shape changes)", () => {

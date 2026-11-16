@@ -38,6 +38,9 @@ def test_query_defaults_are_reported_as_assumptions():
 def test_query_antenna_height_is_not_a_comms_priority():
     r, _ = query.rule_parse("two week mission, power matters, antenna at 3 meters", SITES, TODAY)
     assert r["objective"] == "power" and r["height_m"] == 3.0
+    capped = query.run("use a 30 m mast for 7 days at site a", SITES, TODAY)
+    assert capped["request"]["height_m"] == 15.0
+    assert any("15 m" in n and "maximum" in n for n in capped["assumptions"]), capped["assumptions"]
 
 
 def test_query_month_and_battery_default():
@@ -51,6 +54,10 @@ def test_normalize_rejects_unknown_sites_and_bad_dates():
     out = query.normalize_request({"site_ids": ["nope"], "start": "2027-01-01", "end": "2027-02-01",
                                    "objective": "weird"}, ids)
     assert out["site_ids"] == ids and out["objective"] == "balanced"
+    notes = []
+    out = query.normalize_request({"site_ids": ["demo_a"], "start": "2027-01-01",
+                                   "end": "2027-02-01", "height_m": 30}, ids, notes)
+    assert out["height_m"] == 15.0 and any("15 m" in n for n in notes)
     with pytest.raises(ValueError):
         query.normalize_request({"site_ids": [], "start": "garbage", "end": "2027-02-01"}, ids)
 
@@ -98,7 +105,7 @@ NAMES = ["Demo Site A", "Demo Site B"]
 def test_verifier_accepts_backed_text():
     t = "Demo Site A on 2027-03-12 gives both 72% (72.4 exactly), power 100%, a fragile window; 10 days."
     v = verifier.verify(t, FACTS, NAMES)
-    assert v["verified"], v
+    assert v["verified"] and v["scope"] == "value_presence", v
 
 
 def test_verifier_rejects_invented_number():
@@ -151,11 +158,20 @@ def test_copilot_discards_hallucinating_llm(svc, monkeypatch):
 
 
 def test_service_input_errors_are_clear(svc):
+    assert svc.meta()["max_height_m"] == 15.0
     with pytest.raises(ServiceError):
         svc.windows("demo_a", "2027-03-01", "2027-03-05", 24 * 20)
     with pytest.raises(ServiceError):
         svc.site("nope")
     with pytest.raises(ServiceError):
         svc.series("demo_a", "2027-01-01", "2029-01-01")
+    with pytest.raises(ServiceError):
+        svc.series("demo_a", "2027-01-01", "2027-01-02", step_h=48)
+    with pytest.raises(ServiceError):
+        svc.horizon("demo_a", 30)
+    with pytest.raises(ServiceError):
+        svc.height("demo_a", "2027-01-01", "2027-01-03", heights=(0, 30))
+    one = svc.height("demo_a", "2027-01-01", "2027-01-03", heights=(5,))
+    assert len(one["rows"]) == 1 and one["rows"][0]["height_m"] == 5.0
     with pytest.raises(ServiceError):
         svc.windows("demo_a", "2027-03-01", "2027-04-01", 48, objective="survive")

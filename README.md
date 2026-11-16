@@ -16,7 +16,7 @@ land, and how sure are we?
 | Ephemeris | Analytical (Meeus + IAU 2015 lunar orientation); checked against a textbook example and known libration limits. **Not SPICE** |
 | Terrain | **Synthetic demo terrain.** Real LOLA data could not be downloaded in the build sandbox; see `scripts/README_DATA.md` |
 | Sites | **Demo sites on synthetic terrain, not NASA candidate sites** |
-| Frontend | Passes 23 headless tests (drawing code with strict numeric checks, plus the full app against the live API). **Never viewed in a real browser: look at it yourself before presenting** |
+| Frontend | Passes 23 headless tests (drawing code with strict numeric checks, plus the full app against the live API). Real Chrome screenshots checked at 1400 and 390 px; the full interactive checklist is still pending |
 | LLM paths | Optional; tested only with a fake transport. Everything works without an API key |
 
 Until real terrain and verified sites are loaded, the app shows a permanent warning and results demonstrate the
@@ -42,7 +42,8 @@ Real data: `LUNAR_DEM=... LUNAR_SITES=... ANTHROPIC_API_KEY=...` (all optional).
    - *Query Agent* turns the question into a structured request and lists every assumption it had to make.
    - *Explainer Agent* writes the answer for planners or the public, from computed facts only.
    - *Verifier Agent* (deterministic code) rejects any explanation containing a number, date, site name or label
-     the analysis did not produce, and falls back to a template. The badge in the UI reports what was checked.
+     the analysis did not produce, and falls back to a template. Its pass means the values are present in the
+     computed data, not that every claim is semantically correct; the badge says so.
 
 ## Layout
 ```
