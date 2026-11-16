@@ -487,7 +487,11 @@
     S.meta.warnings.forEach((w, i) => banner.append(h("p", { class: i === 0 && S.meta.synthetic ? "strong" : "", text: w })));
     $("#mast").max = String(maxMast());
     renderLegend();
-    $("#siteChips").append(...S.meta.sites.map((s) => h("label", {}, h("input", { type: "checkbox", value: s.id, checked: true }), s.name)));
+    $("#siteChips").append(...S.meta.sites.map((s) => h("label", {
+      title: s.representative
+        ? "Representative interior point from the official region polygon; not a certified landing coordinate."
+        : (s.note || ""),
+    }, h("input", { type: "checkbox", value: s.id, checked: true }), s.name)));
     const today = new Date(), end = new Date(today.getTime() + 120 * 864e5);
     const iso = (d) => d.toISOString().slice(0, 10);
     $("#start").value = iso(today); $("#end").value = iso(end);

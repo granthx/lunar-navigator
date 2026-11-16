@@ -75,7 +75,10 @@ def run_copilot(svc: Service, message: str, mode: str = "planner", today: str | 
     caveats = []
     if meta["synthetic"]:
         caveats.append("Note: terrain is synthetic demo data, not real lunar terrain.")
-    caveats.append("Note: Sun and Earth positions use an analytical ephemeris, not SPICE.")
+    if meta.get("ephemeris_backend") == "spice":
+        caveats.append("Note: Sun and Earth positions use SPICE DE440.")
+    else:
+        caveats.append("Note: Sun and Earth positions use an analytical ephemeris, not SPICE.")
     if notes_edge:
         caveats.append("Note: the terrain model ends before 30 km at some sites, so distant ridges may be missing.")
     caveats.append("Note: uncertainty covers terrain-height error only.")

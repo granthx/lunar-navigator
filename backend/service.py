@@ -4,8 +4,10 @@ Used by the HTTP API and by the agents' tools, so both see identical numbers.
 """
 from __future__ import annotations
 
+import importlib.util
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 
 import numpy as np
 
@@ -21,9 +23,51 @@ from .windows import OBJECTIVES, find_windows
 MAX_SAMPLES = 24 * 400
 RMAX_M = 30_000.0
 
+EPHEMERIS_ANALYTICAL = "analytical"
+EPHEMERIS_SPICE = "spice"
+
 
 class ServiceError(ValueError):
     """User-facing input problem."""
+
+
+def _resolve_ephemeris(requested: str | None = None) -> tuple[str, tuple[str, ...]]:
+    """Pick the ephemeris backend from an explicit value or the environment.
+
+    `LUNAR_EPHEMERIS=spice` is opt-in and never falls back silently: a missing
+    dependency or kernel file raises ServiceError with the reason.
+    """
+    name = requested if requested is not None else os.environ.get("LUNAR_EPHEMERIS", "")
+    name = (name or "").strip().lower() or EPHEMERIS_ANALYTICAL
+    if name in (EPHEMERIS_ANALYTICAL, "meeus"):
+        return EPHEMERIS_ANALYTICAL, ()
+    if name != EPHEMERIS_SPICE:
+        raise ServiceError(
+            f"LUNAR_EPHEMERIS must be '{EPHEMERIS_ANALYTICAL}' or '{EPHEMERIS_SPICE}' "
+            f"(got '{name}')"
+        )
+    if importlib.util.find_spec("spiceypy") is None:
+        raise ServiceError(
+            "LUNAR_EPHEMERIS=spice requires spiceypy; install it with 'pip install spiceypy'"
+        )
+    raw = os.environ.get("LUNAR_SPICE_KERNELS", "").strip()
+    kernels = (
+        [p.strip() for p in raw.split(os.pathsep) if p.strip()]
+        if raw else eph.default_spice_kernels()
+    )
+    missing = [p for p in kernels if not os.path.isfile(os.path.expanduser(p))]
+    if missing:
+        raise ServiceError(
+            "LUNAR_EPHEMERIS=spice needs the DE440 kernel set, but these files are missing: "
+            + ", ".join(missing)
+            + f". Set LUNAR_SPICE_KERNELS to a '{os.pathsep}'-separated list of the five kernels "
+              "(see scripts/README_DATA.md)."
+        )
+    try:
+        eph.load_spice_kernels(kernels)
+    except Exception as exc:  # noqa: BLE001 - report the actual kernel error
+        raise ServiceError(f"SPICE kernels could not be loaded: {exc}") from exc
+    return EPHEMERIS_SPICE, tuple(kernels)
 
 
 def _parse_day(s: str) -> np.datetime64:
@@ -44,7 +88,9 @@ def _height_in_range(value) -> float:
 
 
 class Service:
-    def __init__(self, dem: DEM | None = None, sites: list[Site] | None = None):
+    def __init__(self, dem: DEM | None = None, sites: list[Site] | None = None,
+                 ephemeris: str | None = None):
+        self.ephemeris, self._kernels = _resolve_ephemeris(ephemeris)
         if dem is None:
             path = os.environ.get("LUNAR_DEM")
             dem = DEM.from_npz(path) if path else synthetic_dem()
@@ -61,16 +107,30 @@ class Service:
         if self.dem.synthetic:
             warnings.append("Terrain is SYNTHETIC demo data, not real lunar terrain. "
                             "Results show how the tool works, not real site performance.")
-        warnings.append("Sun/Earth directions use an analytical ephemeris (about 0.05 deg class), "
-                        "not SPICE. See scripts/README_DATA.md to switch.")
-        if any(not s.verified for s in self.sites.values()):
-            warnings.append("Site coordinates are unverified demo values.")
-        return {"dem_label": self.dem.label, "synthetic": self.dem.synthetic,
-                "px_m": self.dem.px_m, "dem_radius_km": self.dem.radius_m / 1000.0,
-                "ephemeris": "analytical (Meeus + IAU 2015 lunar orientation)",
-                "sites": [s.to_dict() for s in self.sites.values()],
-                "objectives": list(OBJECTIVES), "default_heights_m": list(DEFAULT_HEIGHTS_M),
-                "max_height_m": MAX_MAST_M, "warnings": warnings}
+        if self.ephemeris == EPHEMERIS_SPICE:
+            ephemeris = "SPICE DE440 (MOON_ME frame, LT+S)"
+        else:
+            ephemeris = "analytical (Meeus + IAU 2015 lunar orientation)"
+            warnings.append("Sun/Earth directions use an analytical ephemeris (about 0.05 deg class), "
+                            "not SPICE. See scripts/README_DATA.md to switch.")
+        demo_sites = [s for s in self.sites.values() if not s.verified and not s.representative]
+        if demo_sites:
+            warnings.append("Some site coordinates are unverified demo values.")
+        representative = [s for s in self.sites.values() if s.representative]
+        if representative:
+            warnings.append(
+                f"{len(representative)} site point(s) are representative points inside official "
+                "region polygons, not certified landing coordinates."
+            )
+        out = {"dem_label": self.dem.label, "synthetic": self.dem.synthetic,
+               "px_m": self.dem.px_m, "dem_radius_km": self.dem.radius_m / 1000.0,
+               "ephemeris": ephemeris, "ephemeris_backend": self.ephemeris,
+               "sites": [s.to_dict() for s in self.sites.values()],
+               "objectives": list(OBJECTIVES), "default_heights_m": list(DEFAULT_HEIGHTS_M),
+               "max_height_m": MAX_MAST_M, "warnings": warnings}
+        if self.ephemeris == EPHEMERIS_SPICE:
+            out["ephemeris_kernels"] = [Path(k).name for k in self._kernels]
+        return out
 
     def site(self, site_id: str) -> Site:
         if site_id not in self.sites:
@@ -108,7 +168,10 @@ class Service:
         key = (site_id, str(times[0]), len(times), step_h)
         if key not in self._series:
             s = self.site(site_id)
-            r = eph.sun_earth_azel(s.lat, s.lon, times)
+            if self.ephemeris == EPHEMERIS_SPICE:
+                r = eph.spice_backend(s.lat, s.lon, times, self._kernels)
+            else:
+                r = eph.sun_earth_azel(s.lat, s.lon, times)
             r["times"], r["step_h"] = times, step_h
             self._series[key] = r
         return self._series[key]
