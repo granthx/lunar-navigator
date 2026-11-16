@@ -1,9 +1,12 @@
-"""Verifier Agent: deterministic fact-check of an explanation against computed data.
+"""Verifier Agent: deterministic value-presence check of an explanation.
 
-No LLM is involved, so it cannot hallucinate. It checks that every number, date,
-site name and robustness label in the text is backed by the `facts` the
-analysis produced. Anything it cannot back is reported, and the pipeline then
-falls back to the template explanation.
+No LLM is involved, so it cannot hallucinate. It checks that every number and
+date in the text appears somewhere in the `facts`, that site names occur in
+the facts, and that robustness labels are backed. It does NOT check that a
+number is attached to the right site or metric, and it cannot validate
+qualitative claims such as "NASA-certified". A pass therefore means
+"value presence", not "semantically true". Anything it cannot back is
+reported, and the pipeline then falls back to the template explanation.
 """
 from __future__ import annotations
 
@@ -81,6 +84,7 @@ def verify(text: str, facts: dict, known_site_names: list[str]) -> dict:
                   if re.search(rf"\b{w}\b", lowered) and w not in fact_labels]
 
     ok = not (unmatched or bad_dates or unknown_sites or bad_labels)
-    return {"verified": ok, "numbers_checked": len(tokens), "dates_checked": len(dates),
+    return {"verified": ok, "scope": "value_presence",
+            "numbers_checked": len(tokens), "dates_checked": len(dates),
             "unmatched_numbers": unmatched, "unbacked_dates": bad_dates,
             "unknown_sites": unknown_sites, "unbacked_labels": bad_labels}

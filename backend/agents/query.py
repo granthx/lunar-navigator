@@ -12,6 +12,7 @@ import json
 import re
 from datetime import date, timedelta
 
+from ..height_sweep import MAX_MAST_M
 from . import llm
 
 WORD_NUM = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
@@ -188,14 +189,19 @@ def llm_parse(message: str, sites: list[dict], today: str, transport=None):
         return None
 
 
-def normalize_request(req: dict, site_ids_known: list[str]) -> dict:
+def normalize_request(req: dict, site_ids_known: list[str],
+                      assumptions: list[str] | None = None) -> dict:
     out = dict(req)
     ids = [s for s in out.get("site_ids") or [] if s in site_ids_known]
     out["site_ids"] = ids or list(site_ids_known)
     out["objective"] = out.get("objective") if out.get("objective") in (
         "balanced", "power", "comms", "survive") else "balanced"
     out["duration_h"] = max(6.0, float(out.get("duration_h") or DEFAULT_DURATION_H))
-    out["height_m"] = max(0.0, min(50.0, float(out.get("height_m") or 0.0)))
+    requested_h = float(out.get("height_m") or 0.0)
+    out["height_m"] = max(0.0, min(MAX_MAST_M, requested_h))
+    if requested_h > MAX_MAST_M and assumptions is not None:
+        assumptions.append(f"Requested mast height of {requested_h:g} m exceeds the supported "
+                           f"maximum of {MAX_MAST_M:g} m, so {MAX_MAST_M:g} m is used.")
     bh = out.get("battery_h")
     out["battery_h"] = float(bh) if bh not in (None, "") else None
     if out["objective"] == "survive" and out["battery_h"] is None:
@@ -214,8 +220,10 @@ def run(message: str, sites: list[dict], today: str, transport=None) -> dict:
     if parsed is not None:
         try:
             req, assumptions = parsed
-            return {"request": normalize_request(req, ids), "assumptions": assumptions, "path": path}
+            return {"request": normalize_request(req, ids, assumptions),
+                    "assumptions": assumptions, "path": path}
         except Exception:  # noqa: BLE001 - invalid LLM output -> rules
             pass
     req, assumptions = rule_parse(message, sites, today)
-    return {"request": normalize_request(req, ids), "assumptions": assumptions, "path": "rules"}
+    return {"request": normalize_request(req, ids, assumptions),
+            "assumptions": assumptions, "path": "rules"}
