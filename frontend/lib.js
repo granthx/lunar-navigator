@@ -3,8 +3,8 @@
   "use strict";
 
   const CODE_NAMES = ["neither", "power only", "comms only", "power + comms"];
-  // Distinguishable by lightness as well as hue (neither < comms < power < both)
-  const CODE_COLORS = ["#23262f", "#3a6ea5", "#d9a441", "#8fe3b0"];
+  // Gold means power and blue means comms, matching the Horizon and height charts.
+  const CODE_COLORS = ["#23262f", "#d9a441", "#3a6ea5", "#8fe3b0"];
 
   const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
 

@@ -66,6 +66,7 @@
   }
 
   const mode = () => document.body.dataset.mode;
+  const maxMast = () => Number(S.meta && S.meta.max_height_m) || 15;
   const focusSite = () => S.data[S.focus];
   const selectedIds = () => $$("#siteChips input:checked").map((i) => i.value);
 
@@ -77,6 +78,11 @@
     if (!s) { D.drawEmpty(z.ctx, z.W, z.H, "Choose sites and press Compare sites", true); return; }
     D.drawHorizon(z.ctx, z.W, z.H, s, S.tIdx);
     c.setAttribute("aria-label", "Horizon plot for " + s.site.name + ". " + L.describeSite(s));
+  }
+
+  function renderLegend() {
+    $("#legend").replaceChildren(...L.CODE_NAMES.map((name, code) =>
+      h("li", {}, h("i", { style: "background:" + L.CODE_COLORS[code] }), name)));
   }
 
   function renderTimeline() {
@@ -366,8 +372,10 @@
     const v = r.verification, ver = $("#verify");
     ver.className = "verify " + (v.verified ? "ok" : "bad");
     ver.textContent = v.verified
-      ? "Checked against the data: " + v.numbers_checked + " numbers and " + v.dates_checked + " dates, all supported. " +
-        (r.explanation.source === "llm" ? "Written by a language model, then verified." : "Written from a template, then verified.")
+      ? "Checked against the data: " + v.numbers_checked + " numbers and " + v.dates_checked +
+        " dates all appear in the computed results. This is a value-presence check, not a semantic fact-check. " +
+        (r.explanation.source === "llm" ? "Written by a language model, then checked for matching values."
+          : "Written from a template, then checked for matching values.")
       : "Not fully verified: " + [...v.unmatched_numbers, ...v.unbacked_dates, ...v.unknown_sites, ...v.unbacked_labels].join(", ");
     const as = $("#assumed");
     as.replaceChildren();
@@ -388,7 +396,8 @@
     $("#objective").value = v.objective;
     $("#batteryRow").hidden = v.objective !== "survive";
     if (v.battery_h != null) $("#battery").value = v.battery_h;
-    $("#mast").value = Math.min(15, Math.round(v.height_m));
+    $("#mast").max = String(maxMast());
+    $("#mast").value = Math.min(maxMast(), Math.round(v.height_m));
     $("#mastOut").textContent = $("#mast").value + " m";
     const top = r.ranking[0];
     return refresh(top ? { siteId: top.site_id, start: top.start_iso } : null);
@@ -476,6 +485,8 @@
     } catch (e) { toast(e.message); return; }
     const banner = $("#banner");
     S.meta.warnings.forEach((w, i) => banner.append(h("p", { class: i === 0 && S.meta.synthetic ? "strong" : "", text: w })));
+    $("#mast").max = String(maxMast());
+    renderLegend();
     $("#siteChips").append(...S.meta.sites.map((s) => h("label", {}, h("input", { type: "checkbox", value: s.id, checked: true }), s.name)));
     const today = new Date(), end = new Date(today.getTime() + 120 * 864e5);
     const iso = (d) => d.toISOString().slice(0, 10);
