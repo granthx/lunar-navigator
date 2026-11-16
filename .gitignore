@@ -11,6 +11,7 @@ backend/data/*.tif
 backend/data/*.tiff
 backend/data/*.img
 backend/data/*.lbl
+backend/data/*.geojson
 
 # Python
 __pycache__/
