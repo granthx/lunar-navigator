@@ -179,7 +179,7 @@ def test_synthetic_dem_is_labelled():
 
 def test_proj_south_polar_conversion_matches_projection_math():
     """Build the same smooth field on a PROJ-style grid and on our grid; conversion must agree."""
-    from backend.dem import from_proj_south_polar
+    from backend.dem import from_proj_south_polar, from_proj_south_polar_area
 
     n, px = 301, 1000.0
     c = (n - 1) / 2
@@ -198,6 +198,11 @@ def test_proj_south_polar_conversion_matches_projection_math():
     z_std = field(lat_s, lon_s)
 
     dem = from_proj_south_polar(z_std, px)
+    # For an odd grid with the pole at a pixel centre, the area-aware converter must
+    # reproduce the older function exactly; it additionally supports half-pixel poles.
+    dem_area = from_proj_south_polar_area(z_std, px, c, c, c * px)
+    assert dem_area.z.shape == dem.z.shape
+    assert np.allclose(dem_area.z, dem.z, atol=1e-6)
     # our grid: x = rho*cos(lon), y = rho*sin(lon); col = cx + x/px, row = cy - y/px
     x_m, y_m = (cc - dem.cx) * px, (dem.cy - rr) * px
     lon_m = np.degrees(np.arctan2(y_m, x_m)) % 360

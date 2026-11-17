@@ -10,27 +10,44 @@ Most tools show where the Sun and Earth are. This one **answers the planner's qu
 land, and how sure are we?
 
 ## Status: read this first
+
 | Part | State |
 |---|---|
 | Geometry (horizon, visibility, windows, mast sweep, uncertainty) | Built; 42 unit tests pass, including hand-computed cases |
-| Ephemeris | Analytical (Meeus + IAU 2015 lunar orientation); checked against a textbook example and known libration limits. **Not SPICE** |
-| Terrain | **Synthetic demo terrain.** Real LOLA data could not be downloaded in the build sandbox; see `scripts/README_DATA.md` |
-| Sites | **Demo sites on synthetic terrain, not NASA candidate sites** |
-| Frontend | Passes 23 headless tests (drawing code with strict numeric checks, plus the full app against the live API). Real Chrome screenshots checked at 1400 and 390 px; the full interactive checklist is still pending |
+| Ephemeris | Analytical default; **SPICE DE440 integration is built and was used for the Phase 3 real-data run**. Selection is explicit (`LUNAR_EPHEMERIS=spice`); missing kernels fail loudly |
+| Terrain | **Real LOLA 80 m south-polar DEM** (240 km crop) verified against an independent projection and IAU landmarks. The app still starts on synthetic terrain unless `LUNAR_DEM` is set |
+| Sites | **NASA 2024 nine-region candidate list**. Each region is represented by one interior point derived from its official polygon; these are not certified landing coordinates |
+| Frontend | Passes 23 headless tests (11 drawing/helper + 12 full-app against the live API). Real Chrome screenshots checked at 1400 and 390 px; the full interactive checklist is still pending |
 | LLM paths | Optional; tested only with a fake transport. Everything works without an API key |
 
-Until real terrain and verified sites are loaded, the app shows a permanent warning and results demonstrate the
-method, not real site performance.
+The default run is still a clearly labelled synthetic demo. The Phase 3 real-data run is reproducible with the
+environment variables below and is recorded in `docs/verification-log.md`. NASA Space Apps submission eligibility
+for pre-event work is unresolved; this is a working project, not an official submission.
 
 ## Run it
+
+Synthetic demo (no downloads, no API key):
+
 ```
 pip install numpy scipy uvicorn          # pytest optional
-python3 -m uvicorn backend.api.server:app --port 8000
+python -m uvicorn backend.api.server:app --port 8000
 # open http://127.0.0.1:8000
 ```
-Real data: `LUNAR_DEM=... LUNAR_SITES=... ANTHROPIC_API_KEY=...` (all optional). Tests: `./run_tests.sh`.
+
+Real data (PowerShell; see `scripts/README_DATA.md` for how the inputs were produced):
+
+```powershell
+$env:LUNAR_DEM = "backend/data/lunar_south_pole_80m.npz"
+$env:LUNAR_SITES = "backend/data/sites_real.json"
+$env:LUNAR_EPHEMERIS = "spice"
+python -m uvicorn backend.api.server:app --port 8000
+```
+
+The DEM, SPICE kernels and raw region GeoJSON are large/downloaded and are git-ignored. The small nine-site
+registry is committed. Tests: `./run_tests.sh` (on Windows, run it under Git Bash; 42 Python + 11 frontend + 12 app).
 
 ## What it does
+
 1. **Landing-window finder**: scans every date in a range and ranks mission-length windows for power, comms,
    both, or "survive the dark on a battery of N hours".
 2. **Antenna-height trade-off**: recomputes the horizon at 0-15 m and shows where a small height change flips the result.
@@ -46,18 +63,28 @@ Real data: `LUNAR_DEM=... LUNAR_SITES=... ANTHROPIC_API_KEY=...` (all optional).
      computed data, not that every claim is semantically correct; the badge says so.
 
 ## Layout
+
 ```
 backend/ephemeris.py  horizon.py  visibility.py  windows.py  height_sweep.py  uncertainty.py  dem.py  sites.py
 backend/service.py    cached analysis used by both the API and the agents
 backend/agents/       query.py  explainer.py  verifier.py  llm.py
 backend/orchestrator.py   backend/api/server.py (plain ASGI, no framework)
+backend/data/         sites_template.json, sites_real.json (generated data is git-ignored)
 frontend/             index.html style.css lib.js draw.js app.js   (no build step)
-tests/                pytest + Node tests;  scripts/  data preparation;  docs/demo-script.md
+scripts/              prepare_dem.py prepare_sites.py README_DATA.md
+tests/                pytest + Node tests;  docs/demo-script.md
 ```
 
 ## Known limits
-- The horizon is limited by the DEM's extent; sites near its edge are flagged in the UI.
+
+- The horizon is limited by the DEM extent (240 km radius) and a 30 km search distance; sites near the edge are
+  flagged in the UI.
+- The nine site points are representative interior points from official region polygons, not certified landing
+  coordinates.
 - Sun and Earth are treated as points at their centres (optional clearance margins exist in the API); real
   antenna beams and panel tilt will differ.
 - The uncertainty model is only as good as its assumed terrain error; set it from the data product's documentation.
-- The analytical ephemeris is accurate to a few hundredths of a degree, not SPICE-grade.
+- The verifier is a value-presence check, not a semantic fact-check.
+- The analytical ephemeris is accurate to a few hundredths of a degree, not SPICE-grade. The real-data run used SPICE;
+  the two agree to 0.006° in azimuth and 0.002° in elevation at the nine regions.
+- The real-data result has not been independently validated against an external illumination or communication model.

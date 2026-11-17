@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -6,7 +7,7 @@ from backend.agents import explainer, llm, query, verifier
 from backend.dem import synthetic_dem
 from backend.orchestrator import run_copilot
 from backend.service import Service, ServiceError
-from backend.sites import make_demo_sites
+from backend.sites import load_sites, make_demo_sites
 
 SITES = [{"id": f"demo_{c}", "name": f"Demo Site {c.upper()}"} for c in "abcde"]
 TODAY = "2026-11-04"
@@ -157,7 +158,7 @@ def test_copilot_discards_hallucinating_llm(svc, monkeypatch):
     assert "999" not in r["explanation"]["text"]
 
 
-def test_service_input_errors_are_clear(svc):
+def test_service_input_errors_are_clear(svc, monkeypatch, tmp_path):
     assert svc.meta()["max_height_m"] == 15.0
     with pytest.raises(ServiceError):
         svc.windows("demo_a", "2027-03-01", "2027-03-05", 24 * 20)
@@ -175,3 +176,23 @@ def test_service_input_errors_are_clear(svc):
     assert len(one["rows"]) == 1 and one["rows"][0]["height_m"] == 5.0
     with pytest.raises(ServiceError):
         svc.windows("demo_a", "2027-03-01", "2027-04-01", 48, objective="survive")
+
+    # Phase 3: ephemeris selection is explicit and never falls back silently.
+    with pytest.raises(ServiceError, match="LUNAR_EPHEMERIS"):
+        Service(ephemeris="not-a-backend")
+    monkeypatch.setenv("LUNAR_SPICE_KERNELS", str(tmp_path / "missing.tls"))
+    with pytest.raises(ServiceError) as exc:
+        Service(ephemeris="spice")
+    message = str(exc.value).lower()
+    assert "spice" in message and ("kernel" in message or "spiceypy" in message)
+
+    # Phase 3: representative sites keep their provenance and do not trigger
+    # the demo-coordinate warning.
+    registry = Path(__file__).resolve().parents[1] / "backend" / "data" / "sites_real.json"
+    real = load_sites(str(registry))
+    assert len(real) == 9
+    assert all(s.representative and s.source for s in real)
+    rep_meta = Service(synthetic_dem(size_px=120, px_m=1000.0), real).meta()
+    assert any("representative" in w.lower() for w in rep_meta["warnings"])
+    assert not any("unverified demo" in w.lower() for w in rep_meta["warnings"])
+    assert rep_meta["ephemeris_backend"] == "analytical"
