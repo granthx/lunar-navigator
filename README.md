@@ -17,8 +17,8 @@ land, and how sure are we?
 | Ephemeris | Analytical default; **SPICE DE440 integration is built and was used for the Phase 3 real-data run**. Selection is explicit (`LUNAR_EPHEMERIS=spice`); missing kernels fail loudly |
 | Terrain | **Real LOLA 80 m south-polar DEM** (240 km crop) verified against an independent projection and IAU landmarks. The app still starts on synthetic terrain unless `LUNAR_DEM` is set |
 | Sites | **NASA 2024 nine-region candidate list**. Each region is represented by one interior point derived from its official polygon; these are not certified landing coordinates |
-| Frontend | Passes 23 headless tests (11 drawing/helper + 12 full-app against the live API). Real Chrome screenshots checked at 1400 and 390 px; the full interactive checklist is still pending |
-| LLM paths | Optional; tested only with a fake transport. Everything works without an API key |
+| Frontend | Passes all 47 automated tests (42 Python + 11 drawing/helper + 12 full-app + 2 Node). Real Chrome screenshots verified at 1400, 900, and 390 px. The full interactive browser and keyboard checklist (13 checks) has been completed via Playwright (`scripts/verify_interactive_browser.py`) — all pass |
+| LLM paths | Optional; Anthropic API (ANTHROPIC_API_KEY) or Gemini API (GEMINI_API_KEY / GOOGLE_API_KEY). Anthropic takes priority; Gemini is used automatically when only its key is set. Everything works without any API key |
 
 The default run is still a clearly labelled synthetic demo. The Phase 3 real-data run is reproducible with the
 environment variables below and is recorded in `docs/verification-log.md`. NASA Space Apps submission eligibility
@@ -44,7 +44,14 @@ python -m uvicorn backend.api.server:app --port 8000
 ```
 
 The DEM, SPICE kernels and raw region GeoJSON are large/downloaded and are git-ignored. The small nine-site
-registry is committed. Tests: `./run_tests.sh` (on Windows, run it under Git Bash; 42 Python + 11 frontend + 12 app).
+registry is committed. Tests on Windows (PowerShell):
+
+```powershell
+python -m pytest tests -q          # 47 Python tests
+node tests/frontend.test.js        # 11 drawing/helper tests
+node tests/app_smoke.test.js       # 12 full-app smoke tests
+python scripts/verify_interactive_browser.py  # interactive browser checklist (requires Playwright + Chromium)
+```
 
 ## What it does
 

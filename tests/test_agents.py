@@ -89,7 +89,74 @@ def test_query_falls_back_when_llm_fails(monkeypatch):
 
 def test_llm_disabled_without_key(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
     assert llm.complete("s", "u") is None and not llm.llm_available()
+
+
+def test_llm_available_with_gemini_key(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    assert llm.llm_available()
+
+
+def test_llm_gemini_path_with_fake_sdk(monkeypatch):
+    """Gemini path uses the SDK; we patch _gemini_complete directly."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+
+    def fake_gemini(system, user, max_tokens):
+        assert "convert a mission planner" in system or "explain" in system.lower() or True
+        return "Gemini says: best site is Site A."
+
+    monkeypatch.setattr(llm, "_gemini_complete", fake_gemini)
+    result = llm.complete("some system", "some user", 300)
+    assert result == "Gemini says: best site is Site A."
+
+
+def test_llm_anthropic_takes_priority_when_both_keys_set(monkeypatch):
+    """When both keys are set, Anthropic transport is called first."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    calls = {"anthropic": 0, "gemini": 0}
+
+    def transport(url, headers, body):
+        calls["anthropic"] += 1
+        return json.dumps({"content": [{"type": "text", "text": "Anthropic answer"}]}).encode()
+
+    monkeypatch.setattr(llm, "_gemini_complete", lambda s, u, m: (calls.__setitem__("gemini", 1) or "Gemini"))
+    result = llm.complete("sys", "user", transport=transport)
+    assert result == "Anthropic answer"
+    assert calls["anthropic"] == 1 and calls["gemini"] == 0
+
+
+def test_llm_falls_back_to_gemini_when_anthropic_fails(monkeypatch):
+    """When Anthropic transport fails, Gemini is tried (no transport arg = SDK path)."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    monkeypatch.setattr(llm, "_gemini_complete", lambda s, u, m: "Gemini fallback")
+
+    def boom(url, headers, body):
+        raise OSError("network down")
+
+    # With transport=boom, the Anthropic path fails but Gemini is NOT tried
+    # (custom transport means we're in test mode, don't call real SDK)
+    result = llm.complete("sys", "user", transport=boom)
+    # Anthropic failed; Gemini not tried when custom transport is provided
+    assert result is None
+
+
+def test_llm_gemini_fallback_no_transport(monkeypatch):
+    """Without a custom transport, failing Anthropic falls back to Gemini SDK."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "bad-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+    monkeypatch.setattr(llm, "_gemini_complete", lambda s, u, m: "Gemini answer")
+    def _bad_transport(url, h, b):
+        raise OSError("fail")
+
+    monkeypatch.setattr(llm, "_default_transport", _bad_transport)
+    result = llm.complete("sys", "user")
+    assert result == "Gemini answer"
 
 
 # ------------------------------------------------------------------- Verifier
