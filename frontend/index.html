@@ -135,6 +135,34 @@
         </div>
 
         <div id="tab-moon" role="tabpanel" aria-labelledby="t-moon" hidden>
+          <div class="view-switch-row">
+            <span class="view-badge">🛰 3D MISSION CONTROL DOME</span>
+            <div id="camPresets" class="cam-presets">
+              <button type="button" id="camTactical" class="btn-cam active" data-cam="tactical">🛰 Tactical 3D</button>
+              <button type="button" id="camPov" class="btn-cam" data-cam="pov">👨‍🚀 Lander POV</button>
+              <button type="button" id="camPolar" class="btn-cam" data-cam="polar">🧭 Polar Top-Down</button>
+            </div>
+          </div>
+
+          <div id="scene3dWrap" class="scene3d-container">
+            <canvas id="scene3d"></canvas>
+            <div class="hud-overlay">
+              <div class="hud-top">
+                <div id="hudSite" class="hud-site">LUNAR SOUTH POLE</div>
+                <div id="hudTime" class="hud-time">2027-01-01 00:00 UTC</div>
+              </div>
+              <div class="hud-bottom">
+                <div class="hud-chips">
+                  <span id="hudSun" class="hud-chip ok">☀ SUN +0.0° CLEAR</span>
+                  <span id="hudEarth" class="hud-chip ok">🌍 DTE +0.0° LINK OK</span>
+                </div>
+                <div id="hudStatus" class="hud-status both">NOMINAL: POWER + DTE COMMS</div>
+              </div>
+            </div>
+          </div>
+          <p class="caption">3D terrain horizon bowl extruded from real LOLA DEM laser altimetry data. Yellow orb is the Sun, blue orb is Earth (SPICE DE440 ephemeris). Click and drag to orbit, scroll to zoom.</p>
+
+          <h3 class="sub-head">2D Skyline Panorama</h3>
           <div class="moon-controls">
             <label>Heights <select id="stretch"><option value="1">True scale</option><option value="3" selected>Stretched 3×</option><option value="5">Stretched 5×</option></select></label>
             <label><input id="enlarge" type="checkbox" checked> Enlarge Sun and Earth 3×</label>
@@ -147,6 +175,9 @@
     </div>
   </div>
 
+  <script src="/static/three.min.js"></script>
+  <script src="/static/OrbitControls.js"></script>
+  <script src="/static/scene3d.js"></script>
   <script src="/static/lib.js"></script>
   <script src="/static/draw.js"></script>
   <script src="/static/app.js"></script>

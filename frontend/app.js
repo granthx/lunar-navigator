@@ -25,7 +25,7 @@
   const S = {
     meta: null, data: {}, order: [], windows: {}, focus: null, n: 0, tIdx: 0,
     sel: null, highlight: null, prob: null, height: null, token: 0,
-    last: null, timer: null, heading: 0, tab: "windows", raf: 0,
+    last: null, timer: null, heading: 0, tab: "windows", raf: 0, last3dSite: null,
   };
 
   /* ------------------------------------------------------------------ plumbing */
@@ -97,6 +97,25 @@
     c.setAttribute("aria-label", "Timeline per site. " + sites.map(L.describeSite).join(". "));
   }
 
+  let scene3dInited = false;
+  function renderScene3D() {
+    if (S.tab !== "moon") return;
+    const s = focusSite();
+    if (!s) return;
+    if (typeof window !== "undefined" && window.Scene3D && typeof window.Scene3D.init === "function") {
+      if (!scene3dInited) {
+        scene3dInited = window.Scene3D.init("scene3dWrap");
+      }
+      if (scene3dInited) {
+        if (S.last3dSite !== s.site.id) {
+          window.Scene3D.setSite(s);
+          S.last3dSite = s.site.id;
+        }
+        window.Scene3D.update(s, S.tIdx);
+      }
+    }
+  }
+
   function renderPano() {
     if (S.tab !== "moon") return;
     const c = $("#pano"), s = focusSite();
@@ -107,6 +126,7 @@
       heading: S.heading, fov: Number($("#fov").value), stretch: Number($("#stretch").value),
       enlarge: $("#enlarge").checked,
     });
+    renderScene3D();
   }
 
   function renderReadout() {
@@ -456,6 +476,22 @@
       renderPano();
     }, { passive: false });
     for (const id of ["#fov", "#stretch", "#enlarge"]) $(id).addEventListener("input", renderPano);
+
+    ["#camTactical", "#camPov", "#camPolar"].forEach((id) => {
+      const el = $(id);
+      if (el) {
+        el.addEventListener("click", () => {
+          ["#camTactical", "#camPov", "#camPolar"].forEach((i) => {
+            const b = $(i);
+            if (b && b.classList) b.classList.remove("active");
+          });
+          if (el.classList) el.classList.add("active");
+          if (typeof window !== "undefined" && window.Scene3D && window.Scene3D.setCamera) {
+            window.Scene3D.setCamera(el.dataset.cam || el.getAttribute("data-cam"));
+          }
+        });
+      }
+    });
 
     $("#askForm").addEventListener("submit", (e) => {
       e.preventDefault();

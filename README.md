@@ -61,7 +61,10 @@ python scripts/verify_interactive_browser.py  # interactive browser checklist (r
 3. **Honest uncertainty**: re-runs each window under 30 plausible terrain-height errors (default 8 m,
    correlation 500 m, *assumed values, not measured*) and labels it robust, moderate or fragile. It does not cover
    ephemeris, pointing or dust effects, and the UI says so.
-4. **Standing on the Moon**: first-person skyline with the Sun and Earth moving over it.
+4. **3D Mission Control Dome & Standing on the Moon**: interactive WebGL 3D tactical situational dome
+   extruding real LOLA DEM laser altimetry ridges into a 3D terrain horizon bowl, with animated 3D SPICE Sun
+   and Earth orbits, dynamic line-of-sight raycasts with crater ridge occlusion testing, lander holographic status
+   halo, camera presets (Tactical 3D, Lander POV, Polar Top-Down), alongside a 360° unrolled skyline panorama.
 5. **Copilot**: ask in plain English. Three agents:
    - *Query Agent* turns the question into a structured request and lists every assumption it had to make.
    - *Explainer Agent* writes the answer for planners or the public, from computed facts only.
