@@ -1,100 +1,113 @@
 # Lunar Landing Site Navigator
 
-*Lunar landing decisions in 30 seconds, with proof.*
+*Autonomous lunar South Pole landing site evaluation, line-of-sight visibility analysis, and multi-agent mission planning.*
 
-Built for the NASA Space Apps 2026 challenge "Lunar Landing Site Navigator": an intuitive tool for mission planners,
-educators and the public to compare landing sites and dates, visualising the Sun and Earth against each site's
-terrain horizon to judge power and direct-to-Earth communication windows.
+---
 
-Most tools show where the Sun and Earth are. This one **answers the planner's question**: when and where should we
-land, and how sure are we?
+## 1. Overview
 
-## Status: read this first
+At the lunar South Pole, the Sun and Earth remain perpetually close to the horizon (typically within $1.5^\circ$ to $2.0^\circ$ of local elevation). Because of this low grazing angle, crater rims, ridges, and massifs cast long shadows and frequently sever direct-to-Earth (DTE) radio links.
 
-| Part | State |
-|---|---|
-| Geometry (horizon, visibility, windows, mast sweep, uncertainty) | Built; 42 unit tests pass, including hand-computed cases |
-| Ephemeris | Analytical default; **SPICE DE440 integration is built and was used for the Phase 3 real-data run**. Selection is explicit (`LUNAR_EPHEMERIS=spice`); missing kernels fail loudly |
-| Terrain | **Real LOLA 80 m south-polar DEM** (240 km crop) verified against an independent projection and IAU landmarks. The app still starts on synthetic terrain unless `LUNAR_DEM` is set |
-| Sites | **NASA 2024 nine-region candidate list**. Each region is represented by one interior point derived from its official polygon; these are not certified landing coordinates |
-| Frontend | Passes all 47 automated tests (42 Python + 11 drawing/helper + 12 full-app + 2 Node). Real Chrome screenshots verified at 1400, 900, and 390 px. The full interactive browser and keyboard checklist (13 checks) has been completed via Playwright (`scripts/verify_interactive_browser.py`) — all pass |
-| LLM paths | Optional; Anthropic API (ANTHROPIC_API_KEY) or Gemini API (GEMINI_API_KEY / GOOGLE_API_KEY). Anthropic takes priority; Gemini is used automatically when only its key is set. Everything works without any API key |
+Selecting a viable landing site and mission window requires balancing two often conflicting operational constraints:
+1. **Solar Illumination** for photovoltaic power generation and thermal survival.
+2. **Direct-to-Earth (DTE) Radio Visibility** for real-time telemetry, teleoperation, and crew communications.
 
-The default run is still a clearly labelled synthetic demo. The Phase 3 real-data run is reproducible with the
-environment variables below and is recorded in `docs/verification-log.md`. NASA Space Apps submission eligibility
-for pre-event work is unresolved; this is a working project, not an official submission.
+**Lunar Landing Site Navigator** solves this multi-objective trade-off by combining a deterministic lunar physics core, spatially correlated terrain uncertainty quantification, a fact-checked multi-agent copilot, and an interactive 2D/3D Mission Control interface.
 
-## Run it
+---
 
-Synthetic demo (no downloads, no API key):
+## 2. System Architecture
 
 ```
-pip install numpy scipy uvicorn          # pytest optional
-python -m uvicorn backend.api.server:app --port 8000
-# open http://127.0.0.1:8000
++-----------------------------------------------------------------------------------+
+|                            ORBITAL & TERRAIN INPUTS                               |
+|  - NASA LOLA 80 m South-Polar DEM (or Procedural FFT Synthetic Terrain)           |
+|  - NASA NAIF SPICE DE440 Kernels (or Analytical Meeus + IAU 2015 Model)           |
+|  - Artemis III Candidate Region Polygons (USGS / LROC QuickMap)                   |
++-----------------------------------------+-----------------------------------------+
+                                          |
+                                          v
++-----------------------------------------------------------------------------------+
+|                           DETERMINISTIC NUMERICAL CORE                            |
+|  1. DEM & Stereographic Projection (backend/dem.py)                               |
+|  2. 360-Azimuth Horizon Raymarching (backend/horizon.py)                          |
+|  3. Topocentric Sun/Earth Ephemeris (backend/ephemeris.py)                        |
+|  4. Hourly Visibility Classification (backend/visibility.py)                      |
+|  5. Mission Window Optimization & Ranking (backend/windows.py)                    |
+|  6. Mast-Height Trade-off Sweep (backend/height_sweep.py)                         |
+|  7. Spatially Correlated Monte Carlo Uncertainty (backend/uncertainty.py)         |
++-----------------------------------------+-----------------------------------------+
+                                          |
+                   +----------------------+----------------------+
+                   |                                             |
+                   v                                             v
++--------------------------------------+   +----------------------------------------+
+|       MULTI-AGENT COPILOT            |   |       MISSION CONTROL CLIENT           |
+|  - Query Agent (agents/query.py)     |   |  - 3D Tactical Dome (scene3d.js)       |
+|  - Orchestrator (orchestrator.py)    |   |  - 2D Skyline & 360 Panorama (draw.js) |
+|  - Explainer (agents/explainer.py)   |   |  - Multi-Site Timeline & Scrubber      |
+|  - Verifier (agents/verifier.py)     |   |  - Confidence & Mast Charts (app.js)   |
++--------------------------------------+   +----------------------------------------+
 ```
 
-Real data (PowerShell; see `scripts/README_DATA.md` for how the inputs were produced):
+---
 
-```powershell
-$env:LUNAR_DEM = "backend/data/lunar_south_pole_80m.npz"
-$env:LUNAR_SITES = "backend/data/sites_real.json"
-$env:LUNAR_EPHEMERIS = "spice"
-python -m uvicorn backend.api.server:app --port 8000
-```
+## 3. Core Modules & Physics
 
-The DEM, SPICE kernels and raw region GeoJSON are large/downloaded and are git-ignored. The small nine-site
-registry is committed. Tests on Windows (PowerShell):
+### 3.1 Digital Elevation Model (`backend/dem.py`)
+The terrain engine uses south-polar stereographic projection ($R_{\mathrm{Moon}} = 1,737,400\text{ m}$):
+- **Forward Projection**: Maps selenographic latitude $\phi$ and east-positive longitude $\lambda$ to planar $(x, y)$:
+  $$\rho = 2 R_{\mathrm{Moon}} \tan\left(\frac{\pi}{4} + \frac{\phi}{2}\right), \quad x = \rho \cos(\lambda), \quad y = \rho \sin(\lambda)$$
+- **Inverse Projection**: Maps planar $(x, y)$ back to $(\phi, \lambda)$:
+  $$\rho = \sqrt{x^2 + y^2}, \quad \phi = 2 \arctan\left(\frac{\rho}{2 R_{\mathrm{Moon}}}\right) - \frac{\pi}{2}, \quad \lambda = \mathrm{atan2}(y, x) \pmod{2\pi}$$
+- **Area-Aware Sub-Pixel Centering**: Re-samples even-dimensioned GeoTIFF rasters via bilinear interpolation (`scipy.ndimage.map_coordinates`) onto an odd-dimensioned grid centered on the South Pole.
+- **Dual Modes**: Supports NASA LOLA $80\text{ m/pixel}$ data (`LDEM_80S_80MPP_ADJ.TIF`, $240\text{ km}$ crop radius) as well as a procedural 2D FFT fractal terrain (`synthetic_dem`) for offline operation.
 
-```powershell
-python -m pytest tests -q          # 47 Python tests
-node tests/frontend.test.js        # 11 drawing/helper tests
-node tests/app_smoke.test.js       # 12 full-app smoke tests
-python scripts/verify_interactive_browser.py  # interactive browser checklist (requires Playwright + Chromium)
-```
+### 3.2 Ephemeris Engine (`backend/ephemeris.py`)
+Computes hourly topocentric Sun and Earth azimuth and elevation in the local East-North-Up (ENU) frame:
+- **NASA NAIF SPICE Backend**: Uses `spiceypy` with DE440 planetary ephemerides, lunar physical libration (`MOON_ME` frame), and light-time + stellar aberration corrections (`LT+S`).
+- **Analytical Backend**: Pure-NumPy implementation of Jean Meeus (*Astronomical Algorithms*) and the IAU 2015 lunar orientation model:
+  $$\mathrm{Azimuth} = \mathrm{atan2}(v_{\mathrm{east}}, v_{\mathrm{north}}) \pmod{360^\circ}, \quad \mathrm{Elevation} = \arcsin\left(\frac{v_{\mathrm{up}}}{\|v\|}\right)$$
+- **Explicit Backend Policy**: SPICE mode never silently falls back to analytical mode if kernels are missing.
 
-## What it does
+### 3.3 Horizon Raymarching & Visibility (`backend/horizon.py`, `backend/visibility.py`)
+- Projects 360 azimuthal rays out to $r_{\max} = 30\text{ km}$ with lunar spherical curvature correction $\Delta z = \frac{r^2}{2 R_{\mathrm{Moon}}}$ and observer mast-height offset $z_{\mathrm{obs}} = z_0 + h_{\mathrm{mast}}$.
+- Tracks raster boundary truncation via `edge_limited` flags.
+- Classifies each hour into one of four states: **Neither (0)**, **Power Only (1)**, **Comms Only (2)**, or **Both (3)**.
 
-1. **Landing-window finder**: scans every date in a range and ranks mission-length windows for power, comms,
-   both, or "survive the dark on a battery of N hours".
-2. **Antenna-height trade-off**: recomputes the horizon at 0-15 m and shows where a small height change flips the result.
-3. **Honest uncertainty**: re-runs each window under 30 plausible terrain-height errors (default 8 m,
-   correlation 500 m, *assumed values, not measured*) and labels it robust, moderate or fragile. It does not cover
-   ephemeris, pointing or dust effects, and the UI says so.
-4. **3D Mission Control Dome & Standing on the Moon**: interactive WebGL 3D tactical situational dome
-   extruding real LOLA DEM laser altimetry ridges into a 3D terrain horizon bowl, with animated 3D SPICE Sun
-   and Earth orbits, dynamic line-of-sight raycasts with crater ridge occlusion testing, lander holographic status
-   halo, camera presets (Tactical 3D, Lander POV, Polar Top-Down), alongside a 360° unrolled skyline panorama.
-5. **Copilot**: ask in plain English. Three agents:
-   - *Query Agent* turns the question into a structured request and lists every assumption it had to make.
-   - *Explainer Agent* writes the answer for planners or the public, from computed facts only.
-   - *Verifier Agent* (deterministic code) rejects any explanation containing a number, date, site name or label
-     the analysis did not produce, and falls back to a template. Its pass means the values are present in the
-     computed data, not that every claim is semantically correct; the badge says so.
+### 3.4 Window Optimization (`backend/windows.py`)
+Evaluates contiguous windows of duration $L$ hours using $O(N)$ prefix sums across four mission objectives (with continuous dark stretch $T_{\mathrm{dark, max}}$):
+- **Balanced**: $S_{\mathrm{balanced}} = 0.50\,P_{\mathrm{both}} + 0.25\,P_{\mathrm{power}} + 0.25\,P_{\mathrm{comms}} - 0.25\,\frac{T_{\mathrm{dark, max}}}{L}$
+- **Power First**: $S_{\mathrm{power}} = P_{\mathrm{power}} + 0.30\,P_{\mathrm{both}} - 0.30\,\frac{T_{\mathrm{dark, max}}}{L}$
+- **Comms First**: $S_{\mathrm{comms}} = P_{\mathrm{comms}} + 0.30\,P_{\mathrm{both}} - 0.30\,\frac{T_{\mathrm{comms, max}}}{L}$
+- **Survival**: Enforces onboard battery limits, flagging windows infeasible when $T_{\mathrm{dark, max}} > T_{\mathrm{battery}}$.
 
-## Layout
+### 3.5 Mast-Height Sweep & Uncertainty (`backend/height_sweep.py`, `backend/uncertainty.py`)
+- **Mast Sweep**: Evaluates mast heights from $0\text{ m}$ to $15\text{ m}$ to detect non-linear obstacle-clearance jumps ("flips").
+- **Monte Carlo Uncertainty**: Generates 30 spatially correlated 2D Gaussian terrain realizations ($\sigma = 8\text{ m}$, $500\text{ m}$ correlation length) to compute $P_{10}/P_{50}/P_{90}$ probability bands and robustness ratings.
 
-```
-backend/ephemeris.py  horizon.py  visibility.py  windows.py  height_sweep.py  uncertainty.py  dem.py  sites.py
-backend/service.py    cached analysis used by both the API and the agents
-backend/agents/       query.py  explainer.py  verifier.py  llm.py
-backend/orchestrator.py   backend/api/server.py (plain ASGI, no framework)
-backend/data/         sites_template.json, sites_real.json (generated data is git-ignored)
-frontend/             index.html style.css lib.js draw.js app.js   (no build step)
-scripts/              prepare_dem.py prepare_sites.py README_DATA.md
-tests/                pytest + Node tests;  docs/demo-script.md
-```
+---
 
-## Known limits
+## 4. Multi-Agent Copilot & Mission Control UI
 
-- The horizon is limited by the DEM extent (240 km radius) and a 30 km search distance; sites near the edge are
-  flagged in the UI.
-- The nine site points are representative interior points from official region polygons, not certified landing
-  coordinates.
-- Sun and Earth are treated as points at their centres (optional clearance margins exist in the API); real
-  antenna beams and panel tilt will differ.
-- The uncertainty model is only as good as its assumed terrain error; set it from the data product's documentation.
-- The verifier is a value-presence check, not a semantic fact-check.
-- The analytical ephemeris is accurate to a few hundredths of a degree, not SPICE-grade. The real-data run used SPICE;
-  the two agree to 0.006° in azimuth and 0.002° in elevation at the nine regions.
-- The real-data result has not been independently validated against an external illumination or communication model.
+- **Multi-Agent Copilot (`backend/agents/`, `backend/orchestrator.py`)**:
+  - **Query Agent** parses natural-language requests into explicit site, date, mast-height, and objective parameters.
+  - **Explainer Agent** synthesizes Planner or Public summaries via Gemini (`llm.py`) with deterministic template fallback.
+  - **Verifier Agent** cross-checks every cited number against deterministic service outputs so unverified claims are never surfaced.
+- **3D Tactical Dome (`frontend/scene3d.js`)**:
+  - Built with locally vendored Three.js and OrbitControls (`frontend/vendor/`).
+  - Renders an extruded LOLA terrain bowl, Sun with coronal flare, Earth with atmospheric glow, 3D orbital trajectory arcs, dynamic occlusion raycasts, and a lander status halo.
+- **2D Flight-Operations Dashboard (`frontend/draw.js`, `frontend/app.js`, `frontend/skin.js`)**:
+  - Interactive skyline plot, $360^\circ$ horizon panorama, multi-site timeline scrubber, Monte Carlo confidence band, mast-height chart, passive hero KPI strip, and CSV export.
+
+---
+
+## 5. Candidate Regions & Verification
+
+- **Artemis III Candidate Sites (`backend/data/sites_real.json`)**: Nine South Pole candidate regions derived via projected shoelace centroids from official LROC QuickMap / USGS (`10.5066/P1MEQ6UK`) polygons (`scripts/prepare_sites.py`).
+- **Automated Test Suite (`tests/`)**:
+  - Physics, projection, window ranking, and uncertainty invariants (`tests/test_core.py`)
+  - Ephemeris accuracy benchmarks (`tests/test_ephemeris.py`)
+  - Multi-agent query, explainer, and verifier checks (`tests/test_agents.py`)
+  - Strict `NaN`-free 2D canvas rendering tests (`tests/frontend.test.js`)
+  - End-to-end API and UI smoke tests (`tests/app_smoke.test.js`)

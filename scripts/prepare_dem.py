@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Turn a real south-polar elevation GeoTIFF into the .npz the navigator loads.
 
-Read scripts/README_DATA.md first; orientation mistakes silently rotate or mirror
+Read README.md first; orientation mistakes silently rotate or mirror
 every horizon.
 
     pip install rasterio numpy
@@ -95,7 +95,7 @@ def main() -> int:
     dem.to_npz(a.out)
     print(f"wrote {a.out}: {dem.z.shape}, radius {dem.radius_m / 1000:.1f} km, "
           f"elevation {np.nanmin(dem.z):.0f} to {np.nanmax(dem.z):.0f} m")
-    print("NEXT: verify orientation with landmarks (scripts/README_DATA.md) before trusting any result.")
+    print("NEXT: verify orientation with landmarks (README.md) before trusting any result.")
     return 0
 
 

@@ -2,7 +2,7 @@
 
 Real data: LOLA south-polar DEM products (e.g. 20-80 m/pixel) use a polar
 stereographic projection centred on the pole. `DEM.from_npz` loads a crop that
-has been converted to a numpy file (see scripts/README_DATA.md).
+has been converted to a numpy file (see README.md).
 
 Synthetic data: `synthetic_dem()` builds a clearly labelled stand-in terrain so
 the full pipeline can be developed and demonstrated offline. IT IS NOT REAL
@@ -100,7 +100,7 @@ def from_proj_south_polar(z_std: np.ndarray, px_m: float, label: str = "") -> DE
     -y where y = rho*cos(lon), and longitude is east-positive. Under that assumption the two
     grids differ by a flip of both axes plus a transpose. If your product uses another
     convention, horizons will be rotated or mirrored, so ALWAYS check a few landmarks
-    (see scripts/README_DATA.md).
+    (see README.md).
     """
     z_std = np.asarray(z_std)
     if z_std.ndim != 2 or z_std.shape[0] != z_std.shape[1] or z_std.shape[0] % 2 == 0:

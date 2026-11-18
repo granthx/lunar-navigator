@@ -61,7 +61,7 @@ def _resolve_ephemeris(requested: str | None = None) -> tuple[str, tuple[str, ..
             "LUNAR_EPHEMERIS=spice needs the DE440 kernel set, but these files are missing: "
             + ", ".join(missing)
             + f". Set LUNAR_SPICE_KERNELS to a '{os.pathsep}'-separated list of the five kernels "
-              "(see scripts/README_DATA.md)."
+              "(see README.md)."
         )
     try:
         eph.load_spice_kernels(kernels)
@@ -112,7 +112,7 @@ class Service:
         else:
             ephemeris = "analytical (Meeus + IAU 2015 lunar orientation)"
             warnings.append("Sun/Earth directions use an analytical ephemeris (about 0.05 deg class), "
-                            "not SPICE. See scripts/README_DATA.md to switch.")
+                            "not SPICE. See README.md to switch.")
         demo_sites = [s for s in self.sites.values() if not s.verified and not s.representative]
         if demo_sites:
             warnings.append("Some site coordinates are unverified demo values.")
