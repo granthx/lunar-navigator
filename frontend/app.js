@@ -78,6 +78,7 @@
     if (!s) { D.drawEmpty(z.ctx, z.W, z.H, "Choose sites and press Compare sites", true); return; }
     D.drawHorizon(z.ctx, z.W, z.H, s, S.tIdx);
     c.setAttribute("aria-label", "Horizon plot for " + s.site.name + ". " + L.describeSite(s));
+    renderScene3D();
   }
 
   function renderLegend() {
@@ -99,7 +100,6 @@
 
   let scene3dInited = false;
   function renderScene3D() {
-    if (S.tab !== "moon") return;
     const s = focusSite();
     if (!s) return;
     if (typeof window !== "undefined" && window.Scene3D && typeof window.Scene3D.init === "function") {
@@ -126,7 +126,6 @@
       heading: S.heading, fov: Number($("#fov").value), stretch: Number($("#stretch").value),
       enlarge: $("#enlarge").checked,
     });
-    renderScene3D();
   }
 
   function renderReadout() {

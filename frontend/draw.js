@@ -65,22 +65,49 @@
       ctx.fillText(dirs[k], x(k * 45), H - 9);
     }
 
-    // Sun and Earth tracks over the chosen dates
+    // Realistic luminous trajectory tracks over the chosen dates
     const n = site.times.length;
+    // 1. Golden Solar Trajectory Track
+    ctx.save();
+    ctx.strokeStyle = "rgba(245, 158, 11, 0.45)";
+    ctx.lineWidth = 2.0;
+    ctx.beginPath();
+    let sStarted = false;
     for (let i = 0; i < n; i++) {
-      ctx.fillStyle = "rgba(240,185,58,0.32)";
-      ctx.fillRect(x(site.sun_az[i]) - 1, y(site.sun_el[i]) - 1, 2, 2);
-      ctx.fillStyle = "rgba(110,162,232,0.32)";
-      ctx.fillRect(x(site.earth_az[i]) - 1, y(site.earth_el[i]) - 1, 2, 2);
+      const px = x(site.sun_az[i]), py = y(site.sun_el[i]);
+      if (!sStarted) { ctx.moveTo(px, py); sStarted = true; }
+      else {
+        if (Math.abs(site.sun_az[i] - site.sun_az[i - 1]) > 180) {
+          ctx.stroke(); ctx.beginPath(); ctx.moveTo(px, py);
+        } else { ctx.lineTo(px, py); }
+      }
     }
+    ctx.stroke();
+
+    // 2. Cyan Earth Libration Loop Track
+    ctx.strokeStyle = "rgba(56, 189, 248, 0.55)";
+    ctx.lineWidth = 2.0;
+    ctx.beginPath();
+    let eStarted = false;
+    for (let i = 0; i < n; i++) {
+      const px = x(site.earth_az[i]), py = y(site.earth_el[i]);
+      if (!eStarted) { ctx.moveTo(px, py); eStarted = true; }
+      else {
+        if (Math.abs(site.earth_az[i] - site.earth_az[i - 1]) > 180) {
+          ctx.stroke(); ctx.beginPath(); ctx.moveTo(px, py);
+        } else { ctx.lineTo(px, py); }
+      }
+    }
+    ctx.stroke();
+    ctx.restore();
 
     // current positions (drawn before terrain so terrain hides a body that is blocked)
     const marks = [
-      { az: site.sun_az[tIdx], el: site.sun_el[tIdx], c: SUN, r: Math.max(5, 0.27 * pxPerDeg), name: "Sun" },
-      { az: site.earth_az[tIdx], el: site.earth_el[tIdx], c: EARTH, r: Math.max(7, 0.95 * pxPerDeg), name: "Earth" },
+      { az: site.sun_az[tIdx], el: site.sun_el[tIdx], c: SUN, r: Math.max(6, 0.3 * pxPerDeg), name: "Sun", isSun: true },
+      { az: site.earth_az[tIdx], el: site.earth_el[tIdx], c: EARTH, r: Math.max(8, 0.95 * pxPerDeg), name: "Earth", isSun: false },
     ];
 
-    // terrain silhouette
+    // terrain silhouette with realistic regolith gradient
     ctx.beginPath();
     ctx.moveTo(x(0), y(hor[0]));
     for (let i = 1; i < azs.length; i++) ctx.lineTo(x(azs[i]), y(hor[i]));
@@ -89,11 +116,12 @@
     ctx.lineTo(x(0), pad.t + ph);
     ctx.closePath();
     const tg = ctx.createLinearGradient(0, y(maxOf(hor)), 0, pad.t + ph);
-    tg.addColorStop(0, "#6d6b66");
-    tg.addColorStop(1, "#2a2b2e");
+    tg.addColorStop(0, "#4a4f5c");
+    tg.addColorStop(0.3, "#272c36");
+    tg.addColorStop(1, "#12151c");
     ctx.fillStyle = tg;
     ctx.fill();
-    ctx.strokeStyle = "#cfcac0";
+    ctx.strokeStyle = "#8da2ba";
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.moveTo(x(0), y(hor[0]));
@@ -101,22 +129,51 @@
     ctx.lineTo(x(360), y(hor[0]));
     ctx.stroke();
 
-    // markers on top, with a note when the terrain blocks them
+    // Photorealistic markers with realistic corona / atmospheric glow
     for (const m of marks) {
       const blocked = m.el <= L.horizonAt(azs, hor, m.az);
+      const mx = x(m.az), my = y(m.el);
+
+      if (!blocked && m.isSun) {
+        // Multi-stop solar corona glow
+        const sg = ctx.createRadialGradient(mx, my, 2, mx, my, Math.max(16, m.r * 2.8));
+        sg.addColorStop(0, "rgba(255, 255, 255, 0.95)");
+        sg.addColorStop(0.25, "rgba(255, 220, 110, 0.75)");
+        sg.addColorStop(0.65, "rgba(245, 158, 11, 0.25)");
+        sg.addColorStop(1, "rgba(245, 158, 11, 0)");
+        ctx.fillStyle = sg;
+        ctx.beginPath(); ctx.arc(mx, my, Math.max(16, m.r * 2.8), 0, Math.PI * 2); ctx.fill();
+
+        // Anamorphic flare spikes
+        ctx.strokeStyle = "rgba(255, 240, 180, 0.5)";
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(mx - 24, my); ctx.lineTo(mx + 24, my);
+        ctx.moveTo(mx, my - 24); ctx.lineTo(mx, my + 24);
+        ctx.stroke();
+      } else if (!blocked && !m.isSun) {
+        // Atmospheric Rayleigh limb scattering glow ring
+        const eg = ctx.createRadialGradient(mx, my, m.r * 0.8, mx, my, m.r * 2.2);
+        eg.addColorStop(0, "rgba(56, 189, 248, 0.65)");
+        eg.addColorStop(0.6, "rgba(56, 189, 248, 0.2)");
+        eg.addColorStop(1, "rgba(56, 189, 248, 0)");
+        ctx.fillStyle = eg;
+        ctx.beginPath(); ctx.arc(mx, my, m.r * 2.2, 0, Math.PI * 2); ctx.fill();
+      }
+
       ctx.lineWidth = 2;
       ctx.strokeStyle = m.c;
-      ctx.fillStyle = blocked ? "rgba(0,0,0,0)" : m.c;
+      ctx.fillStyle = blocked ? "rgba(0,0,0,0)" : (m.isSun ? "#fff9e6" : "#2563eb");
       ctx.setLineDash(blocked ? [3, 3] : []);
       ctx.beginPath();
-      ctx.arc(x(m.az), y(m.el), m.r, 0, Math.PI * 2);
+      ctx.arc(mx, my, m.r, 0, Math.PI * 2);
       if (!blocked) ctx.fill();
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.fillStyle = "#e8eaee";
       ctx.textAlign = "left";
-      const lx = Math.min(x(m.az) + m.r + 4, W - 130);
-      ctx.fillText(m.name + (blocked ? " (behind terrain)" : ""), lx, y(m.el) - m.r - 3);
+      const lx = Math.min(mx + m.r + 5, W - 140);
+      ctx.fillText(m.name + (blocked ? " (behind terrain)" : ""), lx, my - m.r - 4);
     }
     ctx.textAlign = "left";
   }

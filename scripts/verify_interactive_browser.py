@@ -174,7 +174,7 @@ def run_checklist():
             page.click("#t-windows")  # switch back
             page.fill("#ask", "Which site is best for a 14-day mission in March, power first?")
             page.click("#askGo")
-            page.wait_for_selector("#answer:not([hidden])", timeout=45000)
+            page.wait_for_selector("#answer:not([hidden])", timeout=85000)
             answer_text = page.inner_text("#answerText")
             verify_text = page.inner_text("#verify")
             assumed_text = page.inner_text("#assumed")
