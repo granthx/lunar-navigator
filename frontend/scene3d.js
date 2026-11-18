@@ -193,8 +193,8 @@
       const H = wrapEl.clientHeight || 400;
 
       scene = new THREE.Scene();
-      scene.background = new THREE.Color(0x06080d);
-      scene.fog = new THREE.FogExp2(0x06080d, 0.003);
+      scene.background = new THREE.Color(0x070a10);
+      scene.fog = new THREE.FogExp2(0x070a10, 0.003);
 
       camera = new THREE.PerspectiveCamera(48, W / H, 0.5, 2500);
       // Start in Lander POV (first person facing the horizon)
@@ -304,7 +304,7 @@
     const floorGeo = new THREE.CircleGeometry(R_TERRAIN, 64);
     const regolithTex = createRegolithTexture();
     const floorMat = new THREE.MeshStandardMaterial({
-      color: 0x161a22,
+      color: 0x121722,
       map: regolithTex,
       roughness: 0.95,
       metalness: 0.05,
@@ -319,7 +319,7 @@
     [15, 30, 45, R_TERRAIN].forEach((r, idx) => {
       const ringGeo = new THREE.RingGeometry(r - 0.15, r + 0.15, 64);
       const ringMat = new THREE.MeshBasicMaterial({
-        color: idx === 3 ? 0x384a65 : 0x1c2434,
+        color: idx === 3 ? 0x2e3f56 : 0x192230,
         side: THREE.DoubleSide,
         transparent: true,
         opacity: 0.65,

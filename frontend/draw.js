@@ -4,17 +4,17 @@
   const L = root.Lib || (typeof require !== "undefined" ? require("./lib.js") : null);
 
   const SUN = "#f0b93a", EARTH = "#6ea2e8";
-  const INK = "#1d2024", MUTED = "#5d6169", PAPER = "#f3f1ec", RULE = "#cfcbc3";
-  const LIGHT_LINES = { both: "#1f9d6b", power: "#b8821a", comms: "#2d5f96" };
+  const INK = "#e2e8f0", MUTED = "#7a8599", PAPER = "#10141c", RULE = "#232c3b";
+  const LIGHT_LINES = { both: "#34d399", power: "#f0b93a", comms: "#5eaee8" };
   const FONT = "12px system-ui, -apple-system, 'Segoe UI', sans-serif";
 
   const maxOf = (a) => { let m = -Infinity; for (let i = 0; i < a.length; i++) if (a[i] > m) m = a[i]; return m; };
   const minOf = (a) => { let m = Infinity; for (let i = 0; i < a.length; i++) if (a[i] < m) m = a[i]; return m; };
 
   function drawEmpty(ctx, W, H, msg, dark) {
-    ctx.fillStyle = dark ? "#0f1218" : PAPER;
+    ctx.fillStyle = dark ? "#0a0e14" : PAPER;
     ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = dark ? "#9aa3b2" : MUTED;
+    ctx.fillStyle = dark ? "#7a8599" : MUTED;
     ctx.font = FONT;
     ctx.textAlign = "center";
     ctx.fillText(msg, W / 2, H / 2);
@@ -23,8 +23,8 @@
 
   function skyGradient(ctx, H) {
     const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, "#07090d");
-    g.addColorStop(1, "#141a26");
+    g.addColorStop(0, "#05080e");
+    g.addColorStop(1, "#0f1622");
     return g;
   }
 
@@ -215,8 +215,16 @@
       ctx.fillText(label, 6, y0 + TL.rowH / 2 + 4);
       const w = Math.max(1, pw / n + 0.6);
       for (let i = 0; i < n; i++) {
+        const cx = TL.left + (i / n) * pw;
         ctx.fillStyle = L.CODE_COLORS[s.code[i]];
-        ctx.fillRect(TL.left + (i / n) * pw, y0, w, TL.rowH);
+        ctx.fillRect(cx, y0, w, TL.rowH);
+        if (s.code[i] === 0) {
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.18)";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.rect(cx, y0, w, TL.rowH);
+          ctx.stroke();
+        }
       }
       if (highlight && highlight.siteId === s.site.id) {
         const a = TL.left + (highlight.start / n) * pw;
@@ -273,7 +281,7 @@
     ctx.beginPath();
     prob.p_both.forEach((p, i) => (i ? ctx.lineTo(x(i), y(p)) : ctx.moveTo(x(i), y(p))));
     ctx.lineTo(x(n - 1), y(0)); ctx.lineTo(x(0), y(0)); ctx.closePath();
-    ctx.fillStyle = "rgba(31,157,107,0.22)";
+    ctx.fillStyle = "rgba(52, 211, 153, 0.18)";
     ctx.fill();
     line(prob.p_power, LIGHT_LINES.power, 1);
     line(prob.p_comms, LIGHT_LINES.comms, 1);
@@ -300,7 +308,7 @@
 
     const j = hs.biggest_jumps.both_pct;
     if (j && j.is_flip) {
-      ctx.fillStyle = "rgba(29,32,36,0.08)";
+      ctx.fillStyle = "rgba(88, 166, 255, 0.12)";
       ctx.fillRect(x(j.from_height_m), pad.t, x(j.to_height_m) - x(j.from_height_m), ph);
     }
     for (const [key, color, name] of series) {
@@ -378,8 +386,9 @@
     ctx.lineTo(W, H);
     ctx.closePath();
     const g = ctx.createLinearGradient(0, y0 - 40, 0, H);
-    g.addColorStop(0, "#77746d");
-    g.addColorStop(1, "#1f2023");
+    g.addColorStop(0, "#4a5568");
+    g.addColorStop(0.3, "#1a2230");
+    g.addColorStop(1, "#0a0e14");
     ctx.fillStyle = g;
     ctx.fill();
 
